@@ -4,7 +4,8 @@
 
 CRM stands for Customer Relationship Management.
 
-CRM is a system that helps companies manage customer data, interactions, sales, and support services in one place.
+CRM is a system that helps companies manage customer data, interactions, business relationships, and support services in one place.
+It helps companies improve customer satisfaction and increase sales.
 
 It helps businesses:
 - Store customer information
