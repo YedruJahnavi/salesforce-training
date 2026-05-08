@@ -17,7 +17,7 @@ It helps businesses:
 
 ## 2. Why Companies Use Salesforce
 
-[Salesforce](https://www.salesforce.com?utm_source=chatgpt.com) is used by companies because it:
+Salesforce is used by companies because it:
 - Organizes customer data efficiently
 - Improves communication between teams
 - Automates business processes
@@ -70,34 +70,3 @@ Examples:
 | Opportunity | Admission process |
 
 ---
-
-## 5. Screenshots from Trailhead
-
-Add screenshots of:
-- Completed Trailhead modules
-- Playground setup
-- Earned badges
-
-Store all screenshots inside the `screenshots/` folder.
-
----
-
-## Modules Completed
-
-- Salesforce Values: Quick Look
-- Salesforce Developer: Quick Look
-- Salesforce CRM
-- Trailhead Playground Management
-
----
-
-## Outcome
-
-By completing this task, I understood:
-- Basics of CRM
-- Salesforce platform overview
-- Business workflow
-- Salesforce objects
-- Trailhead Playground usage
-```
-
