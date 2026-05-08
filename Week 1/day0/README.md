@@ -24,7 +24,7 @@
 
 6. Data Model Basics  
    Learned how data is structured using Objects, Records, and Fields.
-# What Problem Does Salesforce Solve?
+## What Problem Does Salesforce Solve?
 
 Salesforce solves problems related to:
 - Managing large customer data
@@ -37,7 +37,7 @@ It helps companies work more efficiently and improve customer relationships.
 
 ---
 
-# What is CRM?
+## What is CRM?
 
 CRM stands for **Customer Relationship Management**.
 
@@ -49,7 +49,7 @@ CRM is a system used by businesses to:
 
 ---
 
-#  What is an Object in Salesforce?
+##  What is an Object in Salesforce?
 
 An Object in Salesforce is a database table used to store information.
 
@@ -63,7 +63,7 @@ An **Account** object stores company details.
 
 ---
 
-# Salesforce Basic Objects
+## Salesforce Basic Objects
 
 ## Account
 Represents a company or organization.
@@ -95,7 +95,7 @@ Represents a potential business deal or sales process.
 
 ---
 
-# Difference Between Salesforce Admin and Developer
+## Difference Between Salesforce Admin and Developer
 
 | Salesforce Admin | Salesforce Developer |
 |-----------------|---------------------|
@@ -106,7 +106,7 @@ Represents a potential business deal or sales process.
 
 ---
 
-# Real-World Application Using Salesforce
+## Real-World Application Using Salesforce
 
 ## College Management System
 
