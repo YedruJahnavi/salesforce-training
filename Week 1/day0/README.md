@@ -1,4 +1,4 @@
-## **DAY 0 - Salesforce CRM Foundations**
+# **DAY 0 - Salesforce CRM Foundations**
 
 ## Approach Taken
 
