@@ -1,30 +1,29 @@
-## **DAY 0 - Salesforc CRM Foundations**
+## **DAY 0 - Salesforce CRM Foundations**
 
-***Approach Taken***
-**1.CRM Fundamentals**
-Studied the concept of Customer Relationship Management and its role in managing customer data and interactions.
+## Approach Taken
 
-2.Salesforce Platform Overview
-Explored Salesforce as a cloud-based CRM platform used to manage sales, service, and business processes.
+1. CRM Fundamentals  
+   Studied the concept of Customer Relationship Management and its role in managing customer data and interactions.
 
-**3.Core Object Understanding**
-Learned key objects:
+2. Salesforce Platform Overview  
+   Explored Salesforce as a cloud-based CRM platform used to manage sales, service, and business processes.
 
-Lead (potential customer)
-Account (organization)
-Contact (individual)
-Opportunity (sales deal)
+3. Core Object Understanding  
+   Learned key objects:
+   - Lead (potential customer)  
+   - Account (organization)  
+   - Contact (individual)  
+   - Opportunity (sales deal)  
 
-**4.Workflow Understanding**
-Understood the sales lifecycle:
-Lead → Convert → Account + Contact → Opportunity → Deal
+4. Workflow Understanding  
+   Understood the sales lifecycle:  
+   Lead → Convert → Account + Contact → Opportunity → Deal  
 
-**5.Interface Familiarization**
-Navigated the Salesforce interface including Home Page, Navigation Bar, and App Launcher.
+5. Interface Familiarization  
+   Navigated the Salesforce interface including Home Page, Navigation Bar, and App Launcher.
 
-**6.Data Model Basics**
-Learned how data is structured using Objects, Records, and Fields.
-
+6. Data Model Basics  
+   Learned how data is structured using Objects, Records, and Fields.
 # What Problem Does Salesforce Solve?
 
 Salesforce solves problems related to:
