@@ -131,3 +131,37 @@ Update Status
    │
    ▼
 End
+
+```
+
+# 5. Manual vs Automated Process
+
+## Process Chosen: Student Registration Confirmation
+
+### Manual Process
+In the manual process, the admin checks student registration details one by one and sends confirmation emails manually. The admin also updates records and verifies course details separately. This process takes more time and requires continuous human effort.
+
+### Problems in Manual Process
+- Time consuming
+- Repetitive work
+- Higher chance of human errors
+- Delayed communication
+- Difficult to manage large number of students
+
+### Automated Process Using Salesforce
+Using Salesforce Flow Builder, the system automatically sends confirmation emails after registration, updates records, and notifies related departments instantly. The process becomes faster, accurate, and efficient.
+
+### Benefits of Automation
+- Saves time
+- Reduces manual work
+- Improves accuracy
+- Faster communication
+- Better productivity
+
+---
+
+# 6. Reflection – Why Automation Matters in Enterprise Systems
+
+Automation is important in enterprise systems because companies handle large amounts of data and repetitive business processes every day. Manual work can cause delays, errors, and inefficiency. Automation helps businesses complete tasks faster, maintain consistency, and improve productivity.
+
+In Salesforce, automation tools like Flow Builder allow organizations to automate workflows without coding. This helps employees focus on important business decisions instead of repeating the same tasks manually. Automation also improves customer experience by providing quick responses and reliable processes.
