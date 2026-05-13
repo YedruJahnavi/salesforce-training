@@ -1,4 +1,4 @@
-# Salesforce Summer Program – Day 5 Apex Introduction
+# Day 5 Apex Introduction
 
 ## What is Apex?
 
