@@ -2,19 +2,19 @@
 
 ## Data Quality Problems
 
-Data quality issues can affect business operations and decision-making.
+Data quality problems can affect business operations and reporting.
 
 ### Common Problems
 - Duplicate records
 - Missing information
 - Incorrect data entry
 - Outdated records
-- Inconsistent formats
+- Inconsistent data formats
 
 ### Examples
-- Same student entered multiple times
+- Duplicate student records
 - Invalid email addresses
-- Missing phone numbers
+- Missing contact details
 
 ---
 
@@ -22,36 +22,35 @@ Data quality issues can affect business operations and decision-making.
 
 Data migration is the process of moving data from one system to another.
 
-### Migration Steps
+### Migration Process
 1. Extract data
-2. Clean and validate data
-3. Transform data if needed
-4. Import data into Salesforce
-5. Verify imported records
+2. Clean the data
+3. Validate records
+4. Import into Salesforce
+5. Verify imported data
 
 ### Challenges
-- Data inconsistencies
 - Duplicate records
 - Missing values
 - Incorrect mappings
+- Data inconsistencies
 
 ---
 
 ## Duplicate Prevention Ideas
 
-To maintain clean data, organizations should prevent duplicate records.
+Duplicate records can be prevented using:
 
-### Methods
 - Validation Rules
 - Duplicate Rules
 - Matching Rules
 - Unique Fields
-- Regular Data Audits
+- Regular Data Reviews
 
 ### Benefits
-- Better reporting
-- Improved data accuracy
-- Reduced confusion
+- Accurate reports
+- Better data quality
+- Improved decision-making
 
 ---
 
@@ -61,23 +60,23 @@ Poor-quality data can create serious business problems.
 
 ### Risks
 - Incorrect reports
-- Poor decision-making
+- Poor business decisions
 - Customer dissatisfaction
 - Compliance issues
 - Increased operational costs
 
 ### Example
-If duplicate student records exist, attendance and registration reports may become inaccurate.
+Duplicate student records may result in incorrect attendance and registration reports.
 
 ---
 
 ## Reflection
 
-Data is one of the most valuable assets in an enterprise system. Maintaining high-quality data through validation, duplicate prevention, and governance ensures reliable business operations. Proper data management improves accuracy, reporting, and decision-making.
+Data is one of the most important assets in an organization. Maintaining clean and accurate data improves reporting, decision-making, and business efficiency.
 
 ### Why is governance important in data management?
 
-Governance ensures that data is accurate, secure, and consistent across the organization. It establishes rules for data entry, validation, access, and maintenance. Good governance helps reduce errors, prevent duplicates, improve compliance, and support better business decisions.
+Governance ensures that data is accurate, secure, and consistent. It helps organizations follow standards for data entry, validation, access control, and maintenance. Good governance reduces errors and improves data reliability.
 
 ---
 
@@ -87,7 +86,7 @@ Governance ensures that data is accurate, secure, and consistent across the orga
 Clean data improves accuracy and decision-making.
 
 ### 2. What problems happen because of duplicate records?
-Incorrect reports, confusion, and data inconsistencies.
+They cause confusion and inaccurate reports.
 
 ### 3. Why is data migration difficult?
 Because data may contain errors, duplicates, or missing values.
@@ -96,13 +95,13 @@ Because data may contain errors, duplicates, or missing values.
 To import, export, update, and delete Salesforce records.
 
 ### 5. Why should enterprises validate imported data?
-To ensure accuracy and prevent bad data from entering the system.
+To ensure data accuracy and quality.
 
 ### 6. Why are CSV formats important?
-They provide a standard format for data import and export.
+They provide a standard format for importing and exporting data.
 
 ### 7. What risks happen during bulk import?
 Duplicate records, incorrect mappings, and data loss.
 
 ### 8. Why is governance important in data management?
-It ensures data quality, security, and compliance.
+To maintain data quality, security, and compliance.
