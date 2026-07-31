@@ -326,7 +326,17 @@ Application__c app = PlacementService.createApplication(studentId, jobId);
 System.debug(app);
 ```
 - **Test 3:** Creates a new **Application__c** record with:
+## Execute Anonymous Code example
 
+```apex
+Id studentId = 'a06dL00000Qv70zQAB';
+Id jobId = 'a08dL00000fac8vQAA';
+
+Application__c app =
+    PlacementService.createApplication(studentId, jobId);
+
+System.debug(app);
+```
 ---
 # Task 4: Trigger Challenge
 
