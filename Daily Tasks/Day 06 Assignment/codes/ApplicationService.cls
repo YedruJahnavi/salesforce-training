@@ -1,0 +1,20 @@
+public with sharing class ApplicationService {
+
+    public static void validateApplications(List<Application__c> applications) {
+
+        for (Application__c app : applications) {
+
+            if (app.Student__c == null) {
+                app.addError('Student is required.');
+            }
+
+            if (app.Job__c == null) {
+                app.addError('Job is required.');
+            }
+
+            if (String.isBlank(app.Status__c)) {
+                app.addError('Application Status is required.');
+            }
+        }
+    }
+}
