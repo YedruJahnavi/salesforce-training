@@ -1,0 +1,74 @@
+*ApplicationEligibilityService*
+
+public class ApplicationEligibilityService {
+
+    public static void validateEligibility(List<Application__c> applications) {
+
+        // Collect Student Ids
+        Set<Id> studentIds = new Set<Id>();
+
+        // Collect Job Ids
+        Set<Id> jobIds = new Set<Id>();
+
+        for (Application__c app : applications) {
+
+            if (app.Student__c != null) {
+                studentIds.add(app.Student__c);
+            }
+
+            if (app.Job__c != null) {
+                jobIds.add(app.Job__c);
+            }
+        }
+
+        // Query Students once
+        Map<Id, Student__c> studentMap = new Map<Id, Student__c>([
+            SELECT Id,
+                   CGPA__c,
+                   Department__c
+            FROM Student__c
+            WHERE Id IN :studentIds
+        ]);
+
+        // Query Jobs once
+        Map<Id, Job__c> jobMap = new Map<Id, Job__c>([
+            SELECT Id,
+                   Minimum_CGPA__c,
+                   Company__c
+            FROM Job__c
+            WHERE Id IN :jobIds
+        ]);
+
+        // Validate Applications
+        for (Application__c app : applications) {
+
+            Student__c student = studentMap.get(app.Student__c);
+            Job__c job = jobMap.get(app.Job__c);
+
+            if (student == null || job == null) {
+                continue;
+            }
+
+            Boolean eligible = student.CGPA__c >= job.Minimum_CGPA__c;
+
+            if (!eligible) {
+                app.addError(
+                    'Student is not eligible because CGPA is below the minimum required CGPA.'
+                );
+            }
+        }
+    }
+}
+
+
+*Application Trigger*
+
+trigger ApplicationTrigger on Application__c (before insert) {
+
+    if(Trigger.isBefore && Trigger.isInsert){
+
+        ApplicationEligibilityService.validateEligibility(Trigger.new);
+
+    }
+
+}
