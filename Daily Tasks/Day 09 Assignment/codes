@@ -1,0 +1,208 @@
+// ApplicationController.cls
+
+public with sharing class ApplicationController {
+
+    @AuraEnabled
+    public static Id submitApplication(Id jobId) {
+
+        return ApplicationService.submitApplication(jobId);
+    }
+}
+
+
+// ApplicationController.cls-meta.xml
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<ApexClass xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>65.0</apiVersion>
+    <status>Active</status>
+</ApexClass>
+
+
+// ApplicationService.cls
+
+  
+  public with sharing class ApplicationService {
+
+    public static void validateApplications(
+        List<Application__c> applications
+    ) {
+
+        for (Application__c app : applications) {
+
+            if (app.Student__c == null) {
+                app.addError('Student is required.');
+            }
+
+            if (app.Job__c == null) {
+                app.addError('Job is required.');
+            }
+
+            if (String.isBlank(app.Status__c)) {
+                app.addError('Application Status is required.');
+            }
+        }
+    }
+
+    public static Id submitApplication(Id jobId) {
+
+        if (jobId == null) {
+            throw new AuraHandledException(
+                'Job is required.'
+            );
+        }
+        Job__c job;
+
+        try {
+
+            job = [
+                SELECT Id,
+                       Name,
+                       Closing_Date__c,
+                       Minimum_CGPA__c
+                FROM Job__c
+                WHERE Id = :jobId
+                LIMIT 1
+            ];
+
+        } catch (QueryException e) {
+
+            throw new AuraHandledException(
+                'The selected job could not be found.'
+            );
+        }
+
+        if (
+            job.Closing_Date__c != null &&
+            job.Closing_Date__c < Date.today()
+        ) {
+
+            throw new AuraHandledException(
+                'Applications for this job are now closed.'
+            );
+        }
+        Student__c student;
+
+        try {
+
+            student = [
+                SELECT Id,
+                       Name,
+                       CGPA__c,
+                       Department__c,
+                       Email__c
+                FROM Student__c
+                WHERE Email__c = :UserInfo.getUserEmail()
+                LIMIT 1
+            ];
+
+        } catch (QueryException e) {
+
+            throw new AuraHandledException(
+                'Student profile could not be found.'
+            );
+        }
+
+        List<Application__c> existingApplications = [
+            SELECT Id,
+                   Name,
+                   Status__c
+            FROM Application__c
+            WHERE Student__c = :student.Id
+            AND Job__c = :job.Id
+            LIMIT 1
+        ];
+
+        if (!existingApplications.isEmpty()) {
+
+            throw new AuraHandledException(
+                'You have already applied for this opportunity.'
+            );
+        }
+
+        if (job.Minimum_CGPA__c != null) {
+
+            if (
+                student.CGPA__c == null ||
+                student.CGPA__c < job.Minimum_CGPA__c
+            ) {
+
+                throw new AuraHandledException(
+                    'You do not meet the minimum CGPA requirement for this job.'
+                );
+            }
+        }
+        Application__c application =
+            new Application__c();
+
+        application.Student__c = student.Id;
+
+        application.Job__c = job.Id;
+
+        application.Status__c = 'Applied';
+
+        // Automatically store today's date
+        application.Application_Date__c = Date.today();
+
+        // Explicitly set current user as owner
+        application.OwnerId = UserInfo.getUserId();
+
+        try {
+
+            insert application;
+
+        } catch (DmlException e) {
+
+            String errorMessage = e.getDmlMessage(0);
+
+            throw new AuraHandledException(
+                errorMessage
+            );
+        }
+        return application.Id;
+
+// ApplicationService.cls-meta.xml
+
+<<?xml version="1.0" encoding="UTF-8"?>
+<ApexClass xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>65.0</apiVersion>
+    <status>Active</status>
+</ApexClass>
+
+
+// EligibleJobsController.cls
+
+  
+public with sharing class EligibleJobsController {
+    @AuraEnabled(cacheable=true)
+    public static List<Job__c> getEligibleJobs() {
+
+        return [
+            SELECT Id,
+                   Name,
+                   Company__c,
+                   Location__c,
+                   Closing_Date__c,
+                   Minimum_CGPA__c,
+                   Salary__c
+            FROM Job__c
+            ORDER BY Closing_Date__c ASC
+        ];
+    }
+}
+    <apiVersion>65.0</apiVersion>
+    <status>Active</status>
+</ApexClass>
+    }
+}
+
+
+// EligibleJobsController.cls-meta.xml
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<ApexClass xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>67.0</apiVersion>
+    <status>Active</status>
+</ApexClass>
