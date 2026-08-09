@@ -206,3 +206,313 @@ public with sharing class EligibleJobsController {
     <apiVersion>67.0</apiVersion>
     <status>Active</status>
 </ApexClass>
+
+
+// eligibleJobs.html
+
+<template>
+
+    <lightning-card title="Eligible Jobs">
+
+        <div class="slds-p-around_medium">
+
+            <template if:true={jobs.length}>
+
+                <template for:each={jobs} for:item="job">
+
+                    <c-job-card
+                        key={job.Id}
+                        job={job}
+                        onapply={handleApply}>
+                    </c-job-card>
+
+                </template>
+
+            </template>
+
+        </div>
+
+    </lightning-card>
+
+</template>
+
+
+// eligibleJobs.js
+
+import { LightningElement, wire } from 'lwc';
+
+import getEligibleJobs
+    from '@salesforce/apex/EligibleJobsController.getEligibleJobs';
+
+import submitApplication
+    from '@salesforce/apex/ApplicationController.submitApplication';
+
+export default class EligibleJobs extends LightningElement {
+
+    jobs = [];
+
+    @wire(getEligibleJobs)
+    wiredJobs(result) {
+
+        if (result.data) {
+
+            this.jobs = result.data.map(job => {
+
+                return {
+                    ...job,
+                    isSubmitting: false,
+                    isApplied: false,
+                    successMessage: '',
+                    errorMessage: ''
+                };
+
+            });
+
+        } else if (result.error) {
+
+            console.error(result.error);
+
+            this.jobs = [];
+        }
+    }
+
+    async handleApply(event) {
+
+        const jobId = event.detail.jobId;
+
+        // Set only the clicked job to submitting
+        this.jobs = this.jobs.map(job => {
+
+            if (job.Id === jobId) {
+
+                return {
+                    ...job,
+                    isSubmitting: true,
+                    successMessage: '',
+                    errorMessage: ''
+                };
+
+            }
+
+            return job;
+        });
+
+        try {
+
+            const applicationId = await submitApplication({
+                jobId: jobId
+            });
+
+            console.log('Application Id:', applicationId);
+
+            // Update only the clicked job
+            this.jobs = this.jobs.map(job => {
+
+                if (job.Id === jobId) {
+
+                    return {
+                        ...job,
+                        isSubmitting: false,
+                        isApplied: true,
+                        successMessage:
+                            'Application submitted successfully.',
+                        errorMessage: ''
+                    };
+
+                }
+
+                return job;
+            });
+
+        } catch (error) {
+
+            console.error('Application error:', error);
+
+            let message =
+                'We could not submit your application.';
+
+            if (
+                error &&
+                error.body &&
+                error.body.message
+            ) {
+
+                message = error.body.message;
+            }
+
+            // Show error only for the clicked job
+            this.jobs = this.jobs.map(job => {
+
+                if (job.Id === jobId) {
+
+                    return {
+                        ...job,
+                        isSubmitting: false,
+                        errorMessage: message,
+                        successMessage: ''
+                    };
+
+                }
+
+                return job;
+            });
+        }
+    }
+}
+
+
+// eligibleJobs.js-meta.xml
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+
+<LightningComponentBundle
+    xmlns="http://soap.sforce.com/2006/04/metadata">
+
+    <apiVersion>65.0</apiVersion>
+
+    <isExposed>true</isExposed>
+
+    <targets>
+
+        <target>lightning__AppPage</target>
+
+        <target>lightning__HomePage</target>
+
+        <target>lightning__RecordPage</target>
+
+    </targets>
+
+</LightningComponentBundle>
+
+
+// jobCard.html
+
+
+<template>
+
+    <lightning-card title={job.Name}>
+
+        <div class="slds-p-around_medium">
+
+            <p>
+                <strong>Company:</strong>
+                {job.Company__c}
+            </p>
+
+            <p>
+                <strong>Location:</strong>
+                {job.Location__c}
+            </p>
+
+            <p>
+                <strong>Minimum CGPA:</strong>
+                {job.Minimum_CGPA__c}
+            </p>
+
+            <p>
+                <strong>Salary:</strong>
+                {job.Salary__c}
+            </p>
+
+            <p>
+                <strong>Closing Date:</strong>
+                {job.Closing_Date__c}
+            </p>
+
+            <div class="slds-m-top_medium">
+
+                <lightning-button
+                    label={applyButtonLabel}
+                    variant="brand"
+                    onclick={handleApply}
+                    disabled={applyButtonDisabled}>
+                </lightning-button>
+
+            </div>
+
+
+            <!-- Success message for THIS job -->
+            <template if:true={job.successMessage}>
+
+                <div class="slds-text-color_success slds-m-top_medium">
+
+                    ✓ {job.successMessage}
+
+                </div>
+
+            </template>
+
+
+            <!-- Error message for THIS job -->
+            <template if:true={job.errorMessage}>
+
+                <div class="slds-text-color_error slds-m-top_medium">
+
+                    {job.errorMessage}
+
+                </div>
+
+            </template>
+
+        </div>
+
+    </lightning-card>
+
+</template>
+
+
+//jobCard.js
+
+
+import { LightningElement, api } from 'lwc';
+
+export default class JobCard extends LightningElement {
+
+    @api job;
+
+    handleApply() {
+
+        const applyEvent = new CustomEvent('apply', {
+            detail: {
+                jobId: this.job.Id
+            }
+        });
+
+        this.dispatchEvent(applyEvent);
+    }
+
+    get applyButtonLabel() {
+
+        if (this.job.isApplied) {
+            return 'Applied';
+        }
+
+        if (this.job.isSubmitting) {
+            return 'Submitting...';
+        }
+
+        return 'Apply';
+    }
+
+    get applyButtonDisabled() {
+
+        return this.job.isApplied ||
+               this.job.isSubmitting;
+    }
+}
+
+
+// jobCard.js-meta.xml
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+
+<LightningComponentBundle
+    xmlns="http://soap.sforce.com/2006/04/metadata">
+
+    <apiVersion>65.0</apiVersion>
+
+    <isExposed>false</isExposed>
+
+</LightningComponentBundle>
