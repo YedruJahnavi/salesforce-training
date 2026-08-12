@@ -1,0 +1,1588 @@
+Yes. I understand — you want the **actual code blocks**, so you can copy-paste them into your GitHub files one by one, not a ZIP.
+
+I’ll give you the **final versions we reached today**, file by file.
+
+## 1. `ApplicationController.cls`
+
+```apex
+public with sharing class ApplicationController {
+
+    @AuraEnabled
+    public static Id submitApplication(Id jobId) {
+
+        if (jobId == null) {
+
+            throw new AuraHandledException(
+                'Job information is missing.'
+            );
+        }
+
+        try {
+
+            return ApplicationService.submitApplication(jobId);
+
+        } catch (AuraHandledException e) {
+
+            throw e;
+
+        } catch (Exception e) {
+
+            throw new AuraHandledException(
+                'We could not submit your application. Please try again.'
+            );
+        }
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static List<Application__c> getMyApplications() {
+
+        return ApplicationService.getMyApplications();
+    }
+}
+```
+
+---
+
+# 2. `ApplicationService.cls`
+
+```apex
+public with sharing class ApplicationService {
+
+    public static void validateApplications(
+        List<Application__c> applications
+    ) {
+
+        for (Application__c app : applications) {
+
+            if (app.Student__c == null) {
+                app.addError('Student is required.');
+            }
+
+            if (app.Job__c == null) {
+                app.addError('Job is required.');
+            }
+
+            if (String.isBlank(app.Status__c)) {
+                app.addError('Application Status is required.');
+            }
+        }
+    }
+
+    public static Id submitApplication(Id jobId) {
+
+        if (jobId == null) {
+
+            throw new AuraHandledException(
+                'Job is required.'
+            );
+        }
+
+        Job__c job;
+
+        try {
+
+            job = [
+                SELECT Id,
+                       Name,
+                       Closing_Date__c,
+                       Minimum_CGPA__c
+                FROM Job__c
+                WHERE Id = :jobId
+                LIMIT 1
+            ];
+
+        } catch (QueryException e) {
+
+            throw new AuraHandledException(
+                'The selected job could not be found.'
+            );
+        }
+
+        if (
+            job.Closing_Date__c != null &&
+            job.Closing_Date__c < Date.today()
+        ) {
+
+            throw new AuraHandledException(
+                'Applications for this job are now closed.'
+            );
+        }
+
+        Student__c student;
+
+        try {
+
+            student = [
+                SELECT Id,
+                       Name,
+                       CGPA__c,
+                       Department__c,
+                       Email__c
+                FROM Student__c
+                WHERE Email__c = :UserInfo.getUserEmail()
+                LIMIT 1
+            ];
+
+        } catch (QueryException e) {
+
+            throw new AuraHandledException(
+                'Student profile could not be found.'
+            );
+        }
+
+        List<Application__c> existingApplications = [
+            SELECT Id,
+                   Name,
+                   Status__c
+            FROM Application__c
+            WHERE Student__c = :student.Id
+            AND Job__c = :job.Id
+            LIMIT 1
+        ];
+
+        if (!existingApplications.isEmpty()) {
+
+            throw new AuraHandledException(
+                'You have already applied for this opportunity.'
+            );
+        }
+
+        if (job.Minimum_CGPA__c != null) {
+
+            if (
+                student.CGPA__c == null ||
+                student.CGPA__c < job.Minimum_CGPA__c
+            ) {
+
+                throw new AuraHandledException(
+                    'You do not meet the minimum CGPA requirement for this job.'
+                );
+            }
+        }
+
+        Application__c application =
+            new Application__c();
+
+        application.Student__c =
+            student.Id;
+
+        application.Job__c =
+            job.Id;
+
+        application.Status__c =
+            'Applied';
+
+        application.Application_Date__c =
+            Date.today();
+
+        application.OwnerId =
+            UserInfo.getUserId();
+
+        try {
+
+            insert application;
+
+        } catch (DmlException e) {
+
+            String errorMessage =
+                e.getDmlMessage(0);
+
+            throw new AuraHandledException(
+                errorMessage
+            );
+        }
+
+        return application.Id;
+    }
+
+    public static List<Application__c> getMyApplications() {
+
+        Student__c student;
+
+        try {
+
+            student = [
+                SELECT Id
+                FROM Student__c
+                WHERE Email__c = :UserInfo.getUserEmail()
+                LIMIT 1
+            ];
+
+        } catch (QueryException e) {
+
+            return new List<Application__c>();
+        }
+
+        return [
+            SELECT Id,
+                   Name,
+                   Status__c,
+                   Application_Date__c,
+                   Job__c,
+                   Job__r.Name,
+                   Job__r.Company__c,
+                   Job__r.Location__c
+            FROM Application__c
+            WHERE Student__c = :student.Id
+            ORDER BY Application_Date__c DESC
+        ];
+    }
+}
+```
+
+---
+
+# 3. `EligibleJobsController.cls`
+
+Use this version because your Student object uses **Department**, not Branch.
+
+```apex
+public with sharing class EligibleJobsController {
+
+    @AuraEnabled(cacheable=true)
+    public static List<Job__c> getEligibleJobs() {
+
+        Student__c student = [
+            SELECT Id,
+                   Name,
+                   CGPA__c,
+                   Department__c
+            FROM Student__c
+            WHERE Name = 'JAHNAVI'
+            LIMIT 1
+        ];
+
+        Decimal studentCgpa = student.CGPA__c;
+
+        if (studentCgpa == null) {
+
+            return new List<Job__c>();
+        }
+
+        return [
+            SELECT Id,
+                   Name,
+                   Company__c,
+                   Location__c,
+                   Closing_Date__c,
+                   Minimum_CGPA__c,
+                   Salary__c
+            FROM Job__c
+            WHERE Minimum_CGPA__c <= :studentCgpa
+            ORDER BY Closing_Date__c ASC
+        ];
+    }
+}
+```
+
+---
+
+# 4. `StudentProfileController.cls`
+
+```apex
+public with sharing class StudentProfileController {
+
+    @AuraEnabled(cacheable=true)
+    public static Student__c getStudent() {
+
+        return [
+            SELECT Id,
+                   Name,
+                   Phone_Number__c,
+                   Email__c,
+                   DOB__c,
+                   Department__c,
+                   CGPA__c
+            FROM Student__c
+            WHERE Name = 'JAHNAVI'
+            LIMIT 1
+        ];
+    }
+
+    @AuraEnabled
+    public static Student__c updateStudent(
+        Id studentId,
+        String phoneNumber,
+        String email,
+        Date dob,
+        String department,
+        Decimal cgpa
+    ) {
+
+        if (String.isBlank(phoneNumber)) {
+
+            throw new AuraHandledException(
+                'Phone Number is required.'
+            );
+        }
+
+        if (String.isBlank(email)) {
+
+            throw new AuraHandledException(
+                'Email is required.'
+            );
+        }
+
+        if (String.isBlank(department)) {
+
+            throw new AuraHandledException(
+                'Department is required.'
+            );
+        }
+
+        if (
+            cgpa == null ||
+            cgpa < 0 ||
+            cgpa > 10
+        ) {
+
+            throw new AuraHandledException(
+                'CGPA must be between 0 and 10.'
+            );
+        }
+
+        Student__c student = [
+            SELECT Id,
+                   Name,
+                   Phone_Number__c,
+                   Email__c,
+                   DOB__c,
+                   Department__c,
+                   CGPA__c
+            FROM Student__c
+            WHERE Id = :studentId
+            LIMIT 1
+        ];
+
+        student.Phone_Number__c = phoneNumber;
+        student.Email__c = email;
+        student.DOB__c = dob;
+        student.Department__c = department;
+        student.CGPA__c = cgpa;
+
+        update student;
+
+        return student;
+    }
+}
+```
+
+---
+
+# 5. `jobCard.js`
+
+```javascript
+import { LightningElement, api } from 'lwc';
+
+export default class JobCard extends LightningElement {
+
+    @api job;
+
+    handleApply() {
+
+        const applyEvent = new CustomEvent('apply', {
+            detail: {
+                jobId: this.job.Id
+            }
+        });
+
+        this.dispatchEvent(applyEvent);
+    }
+
+    handleViewDetails() {
+
+        const viewDetailsEvent = new CustomEvent(
+            'viewdetails',
+            {
+                detail: {
+                    jobId: this.job.Id
+                }
+            }
+        );
+
+        this.dispatchEvent(viewDetailsEvent);
+    }
+
+    get applyButtonLabel() {
+
+        if (this.job.isApplied) {
+            return 'Applied';
+        }
+
+        if (this.job.isSubmitting) {
+            return 'Submitting...';
+        }
+
+        return 'Apply';
+    }
+
+    get applyButtonDisabled() {
+
+        return this.job.isApplied ||
+               this.job.isSubmitting;
+    }
+}
+```
+
+---
+
+# 6. `jobCard.html`
+
+```html
+<template>
+
+    <lightning-card title={job.Name}>
+
+        <div class="slds-p-around_medium">
+
+            <p>
+                <strong>Company:</strong>
+                {job.Company__c}
+            </p>
+
+            <p>
+                <strong>Location:</strong>
+                {job.Location__c}
+            </p>
+
+            <p>
+                <strong>Minimum CGPA:</strong>
+                {job.Minimum_CGPA__c}
+            </p>
+
+            <p>
+                <strong>Salary:</strong>
+                {job.Salary__c}
+            </p>
+
+            <p>
+                <strong>Closing Date:</strong>
+                {job.Closing_Date__c}
+            </p>
+
+            <div class="slds-m-top_medium">
+
+                <lightning-button
+                    label={applyButtonLabel}
+                    variant="brand"
+                    onclick={handleApply}
+                    disabled={applyButtonDisabled}>
+                </lightning-button>
+
+                <lightning-button
+                    class="slds-m-left_small"
+                    label="View Details"
+                    variant="neutral"
+                    onclick={handleViewDetails}>
+                </lightning-button>
+
+            </div>
+
+            <template if:true={job.successMessage}>
+
+                <div class="slds-text-color_success slds-m-top_medium">
+
+                    ✓ {job.successMessage}
+
+                </div>
+
+            </template>
+
+            <template if:true={job.errorMessage}>
+
+                <div class="slds-text-color_error slds-m-top_medium">
+
+                    {job.errorMessage}
+
+                </div>
+
+            </template>
+
+        </div>
+
+    </lightning-card>
+
+</template>
+```
+
+---
+
+# 7. `eligibleJobs.js`
+
+```javascript
+import { LightningElement, wire } from 'lwc';
+
+import getEligibleJobs
+    from '@salesforce/apex/EligibleJobsController.getEligibleJobs';
+
+import submitApplication
+    from '@salesforce/apex/ApplicationController.submitApplication';
+
+import { refreshApex } from '@salesforce/apex';
+
+export default class EligibleJobs extends LightningElement {
+
+    jobs = [];
+
+    wiredJobsResult;
+
+    @wire(getEligibleJobs)
+    wiredJobs(result) {
+
+        this.wiredJobsResult = result;
+
+        if (result.data) {
+
+            this.jobs = result.data.map(job => {
+
+                return {
+                    ...job,
+                    isSubmitting: false,
+                    isApplied: false,
+                    successMessage: '',
+                    errorMessage: ''
+                };
+
+            });
+
+        } else if (result.error) {
+
+            console.error(result.error);
+
+            this.jobs = [];
+        }
+    }
+
+    async handleApply(event) {
+
+        const jobId = event.detail.jobId;
+
+        this.jobs = this.jobs.map(job => {
+
+            if (job.Id === jobId) {
+
+                return {
+                    ...job,
+                    isSubmitting: true,
+                    successMessage: '',
+                    errorMessage: ''
+                };
+
+            }
+
+            return job;
+        });
+
+        try {
+
+            const applicationId = await submitApplication({
+                jobId: jobId
+            });
+
+            console.log(
+                'Application Id:',
+                applicationId
+            );
+
+            this.jobs = this.jobs.map(job => {
+
+                if (job.Id === jobId) {
+
+                    return {
+                        ...job,
+                        isSubmitting: false,
+                        isApplied: true,
+                        successMessage:
+                            'Application submitted successfully.',
+                        errorMessage: ''
+                    };
+
+                }
+
+                return job;
+            });
+
+            this.dispatchEvent(
+                new CustomEvent(
+                    'applicationsubmitted',
+                    {
+                        detail: {
+                            applicationId:
+                                applicationId
+                        }
+                    }
+                )
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Application error:',
+                error
+            );
+
+            let message =
+                'We could not submit your application.';
+
+            if (
+                error &&
+                error.body &&
+                error.body.message
+            ) {
+
+                message =
+                    error.body.message;
+            }
+
+            this.jobs = this.jobs.map(job => {
+
+                if (job.Id === jobId) {
+
+                    return {
+                        ...job,
+                        isSubmitting: false,
+                        errorMessage: message,
+                        successMessage: ''
+                    };
+
+                }
+
+                return job;
+            });
+        }
+    }
+
+    handleViewDetails(event) {
+
+        this.dispatchEvent(
+            new CustomEvent(
+                'viewdetails',
+                {
+                    detail: {
+                        jobId:
+                            event.detail.jobId
+                    }
+                }
+            )
+        );
+    }
+
+    refreshJobs() {
+
+        if (this.wiredJobsResult) {
+
+            return refreshApex(
+                this.wiredJobsResult
+            );
+        }
+
+        return Promise.resolve();
+    }
+}
+```
+
+---
+
+# 8. `eligibleJobs.html`
+
+```html
+<template>
+
+    <lightning-card title="Eligible Jobs">
+
+        <div class="slds-p-around_medium">
+
+            <template if:true={jobs.length}>
+
+                <template
+                    for:each={jobs}
+                    for:item="job">
+
+                    <c-job-card
+                        key={job.Id}
+                        job={job}
+                        onapply={handleApply}
+                        onviewdetails={handleViewDetails}>
+                    </c-job-card>
+
+                </template>
+
+            </template>
+
+            <template if:false={jobs.length}>
+
+                <c-empty-state
+                    title="No Eligible Jobs"
+                    message="There are currently no jobs matching your eligibility criteria."
+                    action-label="Update Profile">
+                </c-empty-state>
+
+            </template>
+
+        </div>
+
+    </lightning-card>
+
+</template>
+```
+
+---
+
+# 9. `myApplications.js`
+
+```javascript
+import {
+    LightningElement,
+    wire,
+    api
+} from 'lwc';
+
+import getMyApplications
+    from '@salesforce/apex/ApplicationController.getMyApplications';
+
+import { refreshApex } from '@salesforce/apex';
+
+export default class MyApplications extends LightningElement {
+
+    applications = [];
+
+    wiredApplicationsResult;
+
+    @wire(getMyApplications)
+    wiredApplications(result) {
+
+        this.wiredApplicationsResult =
+            result;
+
+        if (result.data) {
+
+            this.applications =
+                result.data;
+
+        } else if (result.error) {
+
+            console.error(
+                'Error loading applications:',
+                result.error
+            );
+
+            this.applications = [];
+        }
+    }
+
+    @api
+    async refreshApplications() {
+
+        if (this.wiredApplicationsResult) {
+
+            await refreshApex(
+                this.wiredApplicationsResult
+            );
+        }
+    }
+}
+```
+
+---
+
+# 10. `myApplications.html`
+
+```html
+<template>
+
+    <lightning-card title="My Applications">
+
+        <div class="slds-p-around_medium">
+
+            <template if:true={applications.length}>
+
+                <template
+                    for:each={applications}
+                    for:item="application">
+
+                    <c-application-card
+                        key={application.Id}
+                        application={application}>
+                    </c-application-card>
+
+                </template>
+
+            </template>
+
+            <template if:false={applications.length}>
+
+                <c-empty-state
+                    title="No Applications"
+                    message="You have not submitted any applications yet."
+                    action-label="">
+                </c-empty-state>
+
+            </template>
+
+        </div>
+
+    </lightning-card>
+
+</template>
+```
+
+---
+
+# 11. `applicationCard.js`
+
+```javascript
+import { LightningElement, api } from 'lwc';
+
+export default class ApplicationCard extends LightningElement {
+
+    @api application;
+
+}
+```
+
+---
+
+# 12. `applicationCard.html`
+
+```html
+<template>
+
+    <lightning-card title={application.Job__r.Name}>
+
+        <div class="slds-p-around_medium">
+
+            <p>
+                <strong>Company:</strong>
+                {application.Job__r.Company__c}
+            </p>
+
+            <p>
+                <strong>Location:</strong>
+                {application.Job__r.Location__c}
+            </p>
+
+            <p>
+                <strong>Applied Date:</strong>
+                {application.Application_Date__c}
+            </p>
+
+            <div class="slds-m-top_medium">
+
+                <strong>Status:</strong>
+
+                <span class="slds-m-left_small">
+
+                    <c-status-badge
+                        status={application.Status__c}
+                        variant="success">
+                    </c-status-badge>
+
+                </span>
+
+            </div>
+
+        </div>
+
+    </lightning-card>
+
+</template>
+```
+
+---
+
+# 13. `statusBadge.js`
+
+```javascript
+import { LightningElement, api } from 'lwc';
+
+export default class StatusBadge extends LightningElement {
+
+    @api status = '';
+
+    @api variant = 'neutral';
+
+    get badgeClass() {
+
+        return `slds-badge ${this.variantClass}`;
+    }
+
+    get variantClass() {
+
+        switch (this.variant) {
+
+            case 'success':
+                return 'slds-theme_success';
+
+            case 'warning':
+                return 'slds-theme_warning';
+
+            case 'error':
+                return 'slds-theme_error';
+
+            case 'info':
+                return 'slds-theme_info';
+
+            default:
+                return 'slds-theme_shade';
+        }
+    }
+}
+```
+
+---
+
+# 14. `statusBadge.html`
+
+```html
+<template>
+
+    <span class={badgeClass}>
+        {status}
+    </span>
+
+</template>
+```
+
+---
+
+# 15. `emptyState.js`
+
+```javascript
+import { LightningElement, api } from 'lwc';
+
+export default class EmptyState extends LightningElement {
+
+    @api title =
+        'No Records Found';
+
+    @api message =
+        'There are no records to display.';
+
+    @api actionLabel = '';
+
+    handleAction() {
+
+        this.dispatchEvent(
+            new CustomEvent('action')
+        );
+    }
+}
+```
+
+---
+
+# 16. `emptyState.html`
+
+```html
+<template>
+
+    <div class="slds-align_absolute-center slds-p-around_large">
+
+        <div class="slds-text-align_center">
+
+            <h2 class="slds-text-heading_medium">
+                {title}
+            </h2>
+
+            <p class="slds-m-top_small">
+                {message}
+            </p>
+
+            <template if:true={actionLabel}>
+
+                <div class="slds-m-top_medium">
+
+                    <lightning-button
+                        label={actionLabel}
+                        variant="brand"
+                        onclick={handleAction}>
+                    </lightning-button>
+
+                </div>
+
+            </template>
+
+        </div>
+
+    </div>
+
+</template>
+```
+
+---
+
+# 17. `studentProfile.js`
+
+```javascript
+import { LightningElement, wire } from 'lwc';
+
+import getStudent
+    from '@salesforce/apex/StudentProfileController.getStudent';
+
+import updateStudent
+    from '@salesforce/apex/StudentProfileController.updateStudent';
+
+export default class StudentProfile extends LightningElement {
+
+    studentId = '';
+
+    studentName = '';
+    phoneNumber = '';
+    email = '';
+    dob = '';
+    department = '';
+    cgpa = '';
+
+    isSaving = false;
+
+    successMessage = '';
+    errorMessage = '';
+
+    @wire(getStudent)
+    wiredStudent({ data, error }) {
+
+        if (data) {
+
+            this.studentId =
+                data.Id;
+
+            this.studentName =
+                data.Name;
+
+            this.phoneNumber =
+                data.Phone_Number__c;
+
+            this.email =
+                data.Email__c;
+
+            this.dob =
+                data.DOB__c;
+
+            this.department =
+                data.Department__c;
+
+            this.cgpa =
+                data.CGPA__c;
+
+            this.errorMessage = '';
+
+        } else if (error) {
+
+            console.error(
+                'Error loading student:',
+                error
+            );
+
+            this.errorMessage =
+                'Unable to load student profile.';
+        }
+    }
+
+    handlePhoneChange(event) {
+        this.phoneNumber =
+            event.target.value;
+    }
+
+    handleEmailChange(event) {
+        this.email =
+            event.target.value;
+    }
+
+    handleDobChange(event) {
+        this.dob =
+            event.target.value;
+    }
+
+    handleDepartmentChange(event) {
+        this.department =
+            event.target.value;
+    }
+
+    handleCgpaChange(event) {
+        this.cgpa =
+            event.target.value;
+    }
+
+    validateForm() {
+
+        const inputs =
+            this.template.querySelectorAll(
+                'lightning-input'
+            );
+
+        let isValid = true;
+
+        inputs.forEach(input => {
+
+            if (!input.reportValidity()) {
+
+                isValid = false;
+            }
+        });
+
+        return isValid;
+    }
+
+    async handleSave() {
+
+        this.successMessage = '';
+        this.errorMessage = '';
+
+        if (!this.validateForm()) {
+            return;
+        }
+
+        const cgpaValue =
+            Number(this.cgpa);
+
+        if (
+            isNaN(cgpaValue) ||
+            cgpaValue < 0 ||
+            cgpaValue > 10
+        ) {
+
+            this.errorMessage =
+                'CGPA must be between 0 and 10.';
+
+            return;
+        }
+
+        this.isSaving = true;
+
+        try {
+
+            await updateStudent({
+
+                studentId:
+                    this.studentId,
+
+                phoneNumber:
+                    this.phoneNumber,
+
+                email:
+                    this.email,
+
+                dob:
+                    this.dob,
+
+                department:
+                    this.department,
+
+                cgpa:
+                    cgpaValue
+            });
+
+            this.successMessage =
+                'Profile updated successfully.';
+
+            this.dispatchEvent(
+                new CustomEvent(
+                    'profilesaved'
+                )
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Error updating student:',
+                error
+            );
+
+            this.errorMessage =
+                error?.body?.message ||
+                'We could not update your profile.';
+
+        } finally {
+
+            this.isSaving = false;
+        }
+    }
+}
+```
+
+---
+
+# 18. `studentProfile.html`
+
+```html
+<template>
+
+    <lightning-card title="Student Profile">
+
+        <div class="slds-p-around_medium">
+
+            <lightning-input
+                label="Student Name"
+                value={studentName}
+                disabled>
+            </lightning-input>
+
+            <lightning-input
+                label="Phone Number"
+                type="tel"
+                value={phoneNumber}
+                required
+                onchange={handlePhoneChange}>
+            </lightning-input>
+
+            <lightning-input
+                label="Email"
+                type="email"
+                value={email}
+                required
+                onchange={handleEmailChange}>
+            </lightning-input>
+
+            <lightning-input
+                label="Date of Birth"
+                type="date"
+                value={dob}
+                onchange={handleDobChange}>
+            </lightning-input>
+
+            <lightning-input
+                label="Department"
+                value={department}
+                required
+                onchange={handleDepartmentChange}>
+            </lightning-input>
+
+            <lightning-input
+                label="CGPA"
+                type="number"
+                value={cgpa}
+                min="0"
+                max="10"
+                step="0.01"
+                required
+                onchange={handleCgpaChange}>
+            </lightning-input>
+
+            <div class="slds-m-top_medium">
+
+                <lightning-button
+                    label="Save Profile"
+                    variant="brand"
+                    onclick={handleSave}
+                    disabled={isSaving}>
+                </lightning-button>
+
+            </div>
+
+            <template if:true={isSaving}>
+
+                <p class="slds-m-top_medium">
+                    Saving...
+                </p>
+
+            </template>
+
+            <template if:true={successMessage}>
+
+                <div
+                    class="slds-text-color_success slds-m-top_medium">
+
+                    {successMessage}
+
+                </div>
+
+            </template>
+
+            <template if:true={errorMessage}>
+
+                <div
+                    class="slds-text-color_error slds-m-top_medium">
+
+                    {errorMessage}
+
+                </div>
+
+            </template>
+
+        </div>
+
+    </lightning-card>
+
+</template>
+```
+
+---
+
+# 19. `placementHome.js`
+
+```javascript
+import { LightningElement } from 'lwc';
+
+export default class PlacementHome extends LightningElement {
+
+    // Student Details
+    studentName = 'JAHNAVI';
+    rollNumber = '22B81A0501';
+    department = 'CSE';
+
+    // Welcome Message
+    message = '';
+
+    // Application Status
+    status = 'Not Applied';
+
+    // Dashboard Data
+    todayDate =
+        new Date().toLocaleDateString();
+
+    companies = 25;
+    jobs = 63;
+    applications = 5;
+
+    // Selected Job
+    selectedJob = null;
+
+
+    showMessage() {
+
+        this.message =
+            'Welcome to Salesforce Development.';
+    }
+
+
+    changeStatus() {
+
+        this.status = 'Applied';
+    }
+
+
+    handleViewDetails(event) {
+
+        const jobId =
+            event.detail.jobId;
+
+        const jobsComponent =
+            this.template.querySelector(
+                'c-eligible-jobs'
+            );
+
+        if (!jobsComponent) {
+            return;
+        }
+
+        const jobs =
+            jobsComponent.jobs;
+
+        this.selectedJob =
+            jobs.find(
+                job => job.Id === jobId
+            );
+    }
+
+
+    handleApplicationSubmitted(event) {
+
+        console.log(
+            'Application submitted:',
+            event.detail.applicationId
+        );
+
+        this.status =
+            'Applied';
+
+        this.applications =
+            this.applications + 1;
+
+        const myApplications =
+            this.template.querySelector(
+                'c-my-applications'
+            );
+
+        if (myApplications) {
+
+            myApplications.refreshApplications();
+        }
+    }
+
+
+    handleProfileSaved() {
+
+        const jobsComponent =
+            this.template.querySelector(
+                'c-eligible-jobs'
+            );
+
+        if (jobsComponent) {
+
+            jobsComponent.refreshJobs();
+        }
+    }
+}
+```
+
+---
+
+# 20. `placementHome.html`
+
+```html
+<template>
+
+    <lightning-card
+        title="Placement Portal"
+        icon-name="standard:education">
+
+        <div class="slds-p-around_medium">
+
+            <h1 class="slds-text-heading_large">
+                Welcome Student
+            </h1>
+
+            <h2 class="slds-text-heading_medium">
+                Hello {studentName}
+            </h2>
+
+            <br/>
+
+            <p>
+                <strong>Today's Date :</strong>
+                {todayDate}
+            </p>
+
+            <br/>
+
+            <p>
+                <strong>Student Name :</strong>
+                {studentName}
+            </p>
+
+            <p>
+                <strong>Roll Number :</strong>
+                {rollNumber}
+            </p>
+
+            <p>
+                <strong>Department :</strong>
+                {department}
+            </p>
+
+            <br/>
+
+            <p>
+                <strong>Number of Companies :</strong>
+                {companies}
+            </p>
+
+            <p>
+                <strong>Number of Jobs :</strong>
+                {jobs}
+            </p>
+
+            <p>
+                <strong>Applications Submitted :</strong>
+                {applications}
+            </p>
+
+            <br/>
+
+            <lightning-button
+                label="Show Welcome Message"
+                variant="brand"
+                onclick={showMessage}>
+            </lightning-button>
+
+            <p class="slds-m-top_medium">
+                {message}
+            </p>
+
+            <br/>
+
+            <p>
+                <strong>Status :</strong>
+                {status}
+            </p>
+
+            <lightning-button
+                label="Apply"
+                variant="success"
+                onclick={changeStatus}>
+            </lightning-button>
+
+        </div>
+
+    </lightning-card>
+
+
+    <div class="slds-m-top_medium">
+
+        <c-student-profile
+            onprofilesaved={handleProfileSaved}>
+        </c-student-profile>
+
+    </div>
+
+
+    <div class="slds-m-top_medium">
+
+        <c-eligible-jobs
+            onviewdetails={handleViewDetails}
+            onapplicationsubmitted=
+                {handleApplicationSubmitted}>
+        </c-eligible-jobs>
+
+    </div>
+
+
+    <div class="slds-m-top_medium">
+
+        <c-my-applications>
+        </c-my-applications>
+
+    </div>
+
+
+    <template if:true={selectedJob}>
+
+        <div class="slds-m-top_medium">
+
+            <lightning-card
+                title="Selected Job Details">
+
+                <div class="slds-p-around_medium">
+
+                    <p>
+                        <strong>Job:</strong>
+                        {selectedJob.Name}
+                    </p>
+
+                    <p>
+                        <strong>Company:</strong>
+                        {selectedJob.Company__c}
+                    </p>
+
+                    <p>
+                        <strong>Location:</strong>
+                        {selectedJob.Location__c}
+                    </p>
+
+                    <p>
+                        <strong>Minimum CGPA:</strong>
+                        {selectedJob.Minimum_CGPA__c}
+                    </p>
+
+                    <p>
+                        <strong>Salary:</strong>
+                        {selectedJob.Salary__c}
+                    </p>
+
+                    <p>
+                        <strong>Closing Date:</strong>
+                        {selectedJob.Closing_Date__c}
+                    </p>
+
+                </div>
+
+            </lightning-card>
+
+        </div>
+
+    </template>
+
+</template>
+```
+
+These are the **copy-paste versions**. Save each block in its corresponding `.cls`, `.js`, or `.html` file in your Salesforce project, then commit them to GitHub.
