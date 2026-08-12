@@ -1,0 +1,523 @@
+### 1. `CandidateSyncQueueable.cls`
+
+```apex
+public class CandidateSyncQueueable implements Queueable, Database.AllowsCallouts {
+
+    private Id applicationId;
+
+    public CandidateSyncQueueable(Id applicationId) {
+        this.applicationId = applicationId;
+    }
+
+    public void execute(QueueableContext context) {
+
+        Application__c applicationRecord = [
+            SELECT Id,
+                   Name,
+                   Status__c,
+                   Application_Date__c,
+                   Integration_Status__c,
+                   External_Candidate_Id__c,
+                   Last_Integration_Attempt__c,
+                   Integration_Error__c,
+                   Student__c,
+                   Student__r.Name,
+                   Student__r.Email__c,
+                   Student__r.Department__c,
+                   Student__r.CGPA__c,
+                   Job__c,
+                   Job__r.Name,
+                   Job__r.Company__c
+            FROM Application__c
+            WHERE Id = :applicationId
+            LIMIT 1
+        ];
+
+        applicationRecord.Last_Integration_Attempt__c = System.now();
+        applicationRecord.Integration_Status__c = 'Pending';
+        applicationRecord.Integration_Error__c = null;
+
+        Map<String, Object> candidate = new Map<String, Object>();
+
+        candidate.put('studentId', String.valueOf(applicationRecord.Student__c));
+        candidate.put('name', applicationRecord.Student__r.Name);
+        candidate.put('email', applicationRecord.Student__r.Email__c);
+        candidate.put('branch', applicationRecord.Student__r.Department__c);
+        candidate.put('cgpa', applicationRecord.Student__r.CGPA__c);
+        candidate.put('jobId', String.valueOf(applicationRecord.Job__c));
+        candidate.put('company', applicationRecord.Job__r.Company__c);
+        candidate.put('role', applicationRecord.Job__r.Name);
+        candidate.put('selectionDate', applicationRecord.Application_Date__c);
+
+        HttpRequest request = new HttpRequest();
+
+        request.setEndpoint('callout:Recruitment_API/posts');
+        request.setMethod('POST');
+        request.setHeader('Content-Type', 'application/json');
+        request.setBody(JSON.serialize(candidate));
+
+        try {
+
+            Http http = new Http();
+            HttpResponse response = http.send(request);
+
+            Integer statusCode = response.getStatusCode();
+            String responseBody = response.getBody();
+
+            if (statusCode == 200 || statusCode == 201) {
+
+                Map<String, Object> responseData =
+                    (Map<String, Object>)
+                    JSON.deserializeUntyped(responseBody);
+
+                if (responseData.containsKey('id')) {
+                    applicationRecord.External_Candidate_Id__c =
+                        String.valueOf(responseData.get('id'));
+                }
+
+                applicationRecord.Integration_Status__c = 'Sent';
+                applicationRecord.Integration_Error__c = null;
+
+            } else if (statusCode == 400) {
+
+                applicationRecord.Integration_Status__c = 'Failed';
+                applicationRecord.Integration_Error__c =
+                    'Bad Request: ' + responseBody;
+
+            } else if (statusCode == 401) {
+
+                applicationRecord.Integration_Status__c = 'Failed';
+                applicationRecord.Integration_Error__c =
+                    'Authentication Failed: ' + responseBody;
+
+            } else if (statusCode == 403) {
+
+                applicationRecord.Integration_Status__c = 'Failed';
+                applicationRecord.Integration_Error__c =
+                    'Forbidden: ' + responseBody;
+
+            } else if (statusCode == 500) {
+
+                applicationRecord.Integration_Status__c = 'Retry Required';
+                applicationRecord.Integration_Error__c =
+                    'External Server Error: ' + responseBody;
+
+            } else {
+
+                applicationRecord.Integration_Status__c = 'Failed';
+                applicationRecord.Integration_Error__c =
+                    'Unexpected Response (' +
+                    statusCode +
+                    '): ' +
+                    responseBody;
+            }
+
+        } catch (Exception e) {
+
+            applicationRecord.Integration_Status__c = 'Retry Required';
+            applicationRecord.Integration_Error__c = e.getMessage();
+        }
+
+        update applicationRecord;
+    }
+}
+```
+
+### 2. `CandidateSyncQueueableTest.cls`
+
+```apex
+@IsTest
+private class CandidateSyncQueueableTest {
+
+    private class RecruitmentApiMock implements HttpCalloutMock {
+
+        public HttpResponse respond(HttpRequest request) {
+
+            HttpResponse response = new HttpResponse();
+
+            response.setStatusCode(201);
+            response.setHeader(
+                'Content-Type',
+                'application/json'
+            );
+
+            response.setBody(
+                '{"id":101,"title":"Candidate Created"}'
+            );
+
+            return response;
+        }
+    }
+
+    @IsTest
+    static void testCandidateSyncSuccess() {
+
+        Student__c student = new Student__c(
+            Name = 'Test Student',
+            Email__c = 'test@example.com',
+            Department__c = 'CSE',
+            CGPA__c = 8.5
+        );
+
+        insert student;
+
+        Job__c job = new Job__c(
+            Name = 'Salesforce Developer',
+            Company__c = 'KSquare'
+        );
+
+        insert job;
+
+        Application__c applicationRecord = new Application__c(
+            Student__c = student.Id,
+            Job__c = job.Id,
+            Status__c = 'Selected',
+            Application_Date__c = Date.today(),
+            Integration_Status__c = 'Pending'
+        );
+
+        insert applicationRecord;
+
+        Test.setMock(
+            HttpCalloutMock.class,
+            new RecruitmentApiMock()
+        );
+
+        Test.startTest();
+
+        System.enqueueJob(
+            new CandidateSyncQueueable(applicationRecord.Id)
+        );
+
+        Test.stopTest();
+
+        Application__c result = [
+            SELECT Integration_Status__c,
+                   External_Candidate_Id__c,
+                   Integration_Error__c,
+                   Last_Integration_Attempt__c
+            FROM Application__c
+            WHERE Id = :applicationRecord.Id
+        ];
+
+        System.assertEquals(
+            'Sent',
+            result.Integration_Status__c
+        );
+
+        System.assertEquals(
+            '101',
+            result.External_Candidate_Id__c
+        );
+
+        System.assertEquals(
+            null,
+            result.Integration_Error__c
+        );
+
+        System.assertNotEquals(
+            null,
+            result.Last_Integration_Attempt__c
+        );
+    }
+}
+```
+
+### 3. `ApplicationTrigger.trigger`
+
+```apex
+trigger ApplicationTrigger on Application__c (after update) {
+
+    for (Application__c newApplication : Trigger.new) {
+
+        Application__c oldApplication =
+            Trigger.oldMap.get(newApplication.Id);
+
+        if (
+            newApplication.Status__c == 'Selected' &&
+            oldApplication.Status__c != 'Selected' &&
+            String.isBlank(newApplication.External_Candidate_Id__c)
+        ) {
+
+            System.enqueueJob(
+                new CandidateSyncQueueable(newApplication.Id)
+            );
+        }
+    }
+}
+```
+
+### 4. `ApplicationTriggerTest.cls`
+
+```apex
+@IsTest
+private class ApplicationTriggerTest {
+
+    private class RecruitmentApiMock implements HttpCalloutMock {
+
+        public Integer calloutCount = 0;
+
+        public HttpResponse respond(HttpRequest request) {
+
+            calloutCount++;
+
+            HttpResponse response = new HttpResponse();
+
+            if (calloutCount == 1) {
+
+                response.setStatusCode(201);
+
+                response.setHeader(
+                    'Content-Type',
+                    'application/json'
+                );
+
+                response.setBody(
+                    '{"id":101,"title":"Candidate Created"}'
+                );
+
+            } else {
+
+                response.setStatusCode(500);
+
+                response.setHeader(
+                    'Content-Type',
+                    'application/json'
+                );
+
+                response.setBody(
+                    '{"error":"Duplicate submission detected"}'
+                );
+            }
+
+            return response;
+        }
+    }
+
+    @IsTest
+    static void testApplicationTriggerQueuesCandidateSync() {
+
+        Student__c student = new Student__c(
+            Name = 'Trigger Test Student',
+            Email__c = 'triggertest@example.com',
+            Department__c = 'CSE',
+            CGPA__c = 8.5
+        );
+
+        insert student;
+
+        Job__c job = new Job__c(
+            Name = 'Salesforce Developer',
+            Company__c = 'Test Company'
+        );
+
+        insert job;
+
+        Schema.DescribeFieldResult statusField =
+            Application__c.Status__c.getDescribe();
+
+        String initialStatus;
+
+        for (
+            Schema.PicklistEntry entry :
+            statusField.getPicklistValues()
+        ) {
+
+            if (
+                entry.isActive() &&
+                entry.getValue() != 'Selected'
+            ) {
+
+                initialStatus = entry.getValue();
+                break;
+            }
+        }
+
+        System.assertNotEquals(
+            null,
+            initialStatus,
+            'A non-Selected Application Status value is required.'
+        );
+
+        Application__c applicationRecord =
+            new Application__c(
+                Student__c = student.Id,
+                Job__c = job.Id,
+                Status__c = initialStatus,
+                Application_Date__c = Date.today(),
+                Integration_Status__c = 'Pending'
+            );
+
+        insert applicationRecord;
+
+        RecruitmentApiMock mock =
+            new RecruitmentApiMock();
+
+        Test.setMock(
+            HttpCalloutMock.class,
+            mock
+        );
+
+        Test.startTest();
+
+        applicationRecord.Status__c = 'Selected';
+
+        update applicationRecord;
+
+        Test.stopTest();
+
+        Application__c result = [
+            SELECT Status__c,
+                   Integration_Status__c,
+                   External_Candidate_Id__c,
+                   Integration_Error__c,
+                   Last_Integration_Attempt__c
+            FROM Application__c
+            WHERE Id = :applicationRecord.Id
+        ];
+
+        System.assertEquals(
+            'Selected',
+            result.Status__c
+        );
+
+        System.assertEquals(
+            'Sent',
+            result.Integration_Status__c
+        );
+
+        System.assertEquals(
+            '101',
+            result.External_Candidate_Id__c
+        );
+
+        System.assertEquals(
+            null,
+            result.Integration_Error__c
+        );
+
+        System.assertNotEquals(
+            null,
+            result.Last_Integration_Attempt__c
+        );
+
+        System.assertEquals(
+            1,
+            mock.calloutCount
+        );
+    }
+
+    @IsTest
+    static void testDuplicateCandidateIsNotSubmitted() {
+
+        Student__c student = new Student__c(
+            Name = 'Duplicate Test Student',
+            Email__c = 'duplicate@example.com',
+            Department__c = 'CSE',
+            CGPA__c = 8.5
+        );
+
+        insert student;
+
+        Job__c job = new Job__c(
+            Name = 'Salesforce Developer',
+            Company__c = 'KSquare'
+        );
+
+        insert job;
+
+        Application__c applicationRecord =
+            new Application__c(
+                Student__c = student.Id,
+                Job__c = job.Id,
+                Status__c = 'Applied',
+                Application_Date__c = Date.today(),
+                Integration_Status__c = 'Pending'
+            );
+
+        insert applicationRecord;
+
+        RecruitmentApiMock mock =
+            new RecruitmentApiMock();
+
+        Test.setMock(
+            HttpCalloutMock.class,
+            mock
+        );
+
+        Test.startTest();
+
+        applicationRecord.Status__c = 'Selected';
+
+        update applicationRecord;
+
+        Test.stopTest();
+
+        Application__c firstResult = [
+            SELECT Id,
+                   Status__c,
+                   External_Candidate_Id__c,
+                   Integration_Status__c
+            FROM Application__c
+            WHERE Id = :applicationRecord.Id
+        ];
+
+        System.assertEquals(
+            'Selected',
+            firstResult.Status__c
+        );
+
+        System.assertEquals(
+            'Sent',
+            firstResult.Integration_Status__c
+        );
+
+        System.assertEquals(
+            '101',
+            firstResult.External_Candidate_Id__c
+        );
+
+        System.assertEquals(
+            1,
+            mock.calloutCount
+        );
+
+        firstResult.Status__c = 'Applied';
+
+        update firstResult;
+
+        firstResult.Status__c = 'Selected';
+
+        update firstResult;
+
+        Application__c finalResult = [
+            SELECT Id,
+                   Status__c,
+                   External_Candidate_Id__c,
+                   Integration_Status__c
+            FROM Application__c
+            WHERE Id = :applicationRecord.Id
+        ];
+
+        System.assertEquals(
+            'Selected',
+            finalResult.Status__c
+        );
+
+        System.assertEquals(
+            'Sent',
+            finalResult.Integration_Status__c
+        );
+
+        System.assertEquals(
+            '101',
+            finalResult.External_Candidate_Id__c
+        );
+
+        System.assertEquals(
+            1,
+            mock.calloutCount
+        );
+    }
+}
+```
