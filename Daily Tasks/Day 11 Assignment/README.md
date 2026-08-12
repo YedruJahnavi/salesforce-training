@@ -603,5 +603,4 @@ The integration also provides response handling, error tracking, retry identific
 # Placement Management System
 
 **Author:** Jahnavi Yedru
-**After pasting:** press **Ctrl + S**. Do not deploy `README.md`.
 ```
